@@ -3,28 +3,57 @@ name: Crypto Twitter Bot
 on:
   schedule:
     - cron: '0 * * * *'  # Every hour
-  workflow_dispatch:  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Set to "false" to allow posting (unsafe). Default true.'
+        required: false
+        default: 'true'
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    
+    env:
+      # DRY_RUN string is set from the workflow_dispatch input
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.12'
-    
+
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
-    
+        pip install -r requirements.txt || true
+
+    - name: Debug: show repo and bot.py
+      run: |
+        echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+        pwd
+        echo "---- top-level repo listing ----"
+        ls -la
+        echo "---- .github listing ----"
+        ls -la .github || true
+        echo "---- bot.py (first 200 lines) ----"
+        sed -n '1,200p' bot.py || true
+
     - name: Run bot
       env:
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
         TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
         TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
         TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        DRY_RUN: ${{ env.DRY_RUN }}
       run: python bot.py
+
+    - name: Upload bot logs and source
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: bot-logs
+        path: |
+          bot.log
+          bot.py
